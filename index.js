@@ -8,8 +8,6 @@ function JSONParse(message) {
         return null;
     }
 }
-
-//Только для запущенных и активных соединений. -Ка
 class AsyncSocket extends EventEmitter {
     constructor(ws) {
         super();

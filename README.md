@@ -1,8 +1,8 @@
 # AsyncSocket
-AsyncSocket is a simple implementation of WS communication using asynchronous methods.\
-It consists of a Node.js, Web and WebMin modules. For Node.js is implemented by AsyncSocketServer, which is the main difference from a regular WebSocket.\
-The server is what the 'connection' event returns AsyncSocket. \
-AsyncSocket, in turn, is the same WebSocket client, but implements its own 'message' event and methods: .send .sendNoReply and .sendEmit
+AsyncSocket is a simple implementation of WS communication using asynchronous methods.
+It consists of a Node.js module, Web and WebMin. \
+An AsyncSocketServer is implemented for Node.js, the main difference from a regular WebSocket.Server is that the "connection" event returns an AsyncSocket. \
+AsyncSocket is the same WebSocket client, but implements its own "message" event and methods: send, sendNoReply, sendEmit.
 ```js
 //Server side
 const wss = new AsyncSocketServer({port: 8080});

@@ -7,16 +7,22 @@ function JSONParse(message) {
 }
 
 class AsyncSocket extends EventTarget {
-    constructor(ws) {
+    constructor(ws, options={}) {
         super();
         this.ws = ws;
         this._awaitMessages = {};
+        this.timeout = {
+            time:options.time??2,//секунды
+            countLimit:options.count??5,
+            count:1
+        };
+        this.tasksForRecon = [];
 
         ws.addEventListener('message', (message) => {
             const data = JSONParse(message.data);
-            if(data === null) return this.dispatchEvent('message', message);
+            if(data === null) return this.dispatchEvent(message);
             if(this._incoming(data)===2) return this.dispatchEvent(new CustomEvent('message', {
-                data: {
+                detail: {
                     ...data,
                     asyncSocket: this,
                     reply: function(data) {
@@ -33,6 +39,32 @@ class AsyncSocket extends EventTarget {
             else ws.addEventListener(event, listener);
         };
         this.dispatchEvent(new CustomEvent('open'));
+        if(options.reconnect){
+            this.ws.addEventListener("close", ()=>{
+                const oldEvents = this.ws._events;
+                this.disconnected = true;
+                const reconnect = address => new Promise((resolve, reject)=>{
+                    const ws = new WebSocket(address);
+                    ws.addEventListener("open", ()=>{
+                        this.ws = ws;
+                        this.timeout.count = 1;
+                        this.ws._events = oldEvents;
+                        this.disconnected = false;
+                        for(const task of this.tasksForRecon) this.sendNoReply(task);
+                        this.tasksForRecon = [];
+                        resolve(ws);
+                    });
+                    ws.addEventListener("error", reject);
+                    ws.addEventListener("close", reject);
+                }).catch(async (reason)=>{
+                    if(this.timeout.count > this.timeout.countLimit) return;
+                    await new Promise(resolve=>setTimeout(resolve, (this.timeout.time**this.timeout.count)*1000));
+                    this.timeout.count++;
+                    reconnect(address);
+                });
+                reconnect(this.ws.url);
+            });
+        }
     }
     _incoming(data) {
         if(this._awaitMessages[data.waitId]) {
@@ -55,7 +87,8 @@ class AsyncSocket extends EventTarget {
         });
     }
     sendNoReply(data) {
-        this.ws.send(JSON.stringify(data));
+        if(this.disconnected) this.tasksForRecon.push(data);
+        else this.ws.send(JSON.stringify(data));
     }
     send(data={}) {
         const {waitId = Date.now().toString(), timeout=10000} = data;
@@ -70,10 +103,10 @@ class AsyncSocket extends EventTarget {
     }
 }
 
-function AsyncSocketClient(wsc) {
+function AsyncSocketClient(wsc,options) {
     return new Promise((resolve, reject) => {
         wsc.addEventListener('open', async () => {
-            const wsr = new AsyncSocket(wsc);
+            const wsr = new AsyncSocket(wsc,options);
             resolve(wsr);
         });
     });

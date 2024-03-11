@@ -5,6 +5,13 @@ function JSONParse(message) {
         return null;
     }
 }
+function uuidv4() {
+    return "10000000-1000-4000-8000-100000000000".replace(
+        /[018]/g, 
+        c =>(c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+}
+  
 
 class AsyncSocket extends EventTarget {
     constructor(ws, options={}) {
@@ -35,7 +42,7 @@ class AsyncSocket extends EventTarget {
         
         this.nativeOn = this.addEventListener;
         this.addEventListener = function(event, listener) {
-            if(event=="message") this.nativeOn(event, listener);
+            if(![].includes(event)) this.nativeOn(event, listener);
             else ws.addEventListener(event, listener);
         };
         this.dispatchEvent(new CustomEvent('open'));
@@ -74,8 +81,7 @@ class AsyncSocket extends EventTarget {
             return 0;
         }
         if(data.isEvent) {
-            this.dispatchEvent(new CustomEvent(data.eventName, data.body));
-
+            this.dispatchEvent(new CustomEvent(data.eventName, {detail: data.body}));
             return 1;
         }
         return 2;
@@ -91,14 +97,14 @@ class AsyncSocket extends EventTarget {
         else this.ws.send(JSON.stringify(data));
     }
     send(data={}) {
-        const {waitId = Date.now().toString(), timeout=10000} = data;
+        const {waitId = uuidv4(), timeout=10000} = data;
         return new Promise((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId, resolve, reject,
                 timeout: timeout?setTimeout(() => reject(new Error("The waiting time has been exceeded")), timeout):null
             };
 
-            this.sendNoReply(data);
+            this.sendNoReply({...data, waitId});
         });
     }
 }

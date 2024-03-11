@@ -37,7 +37,7 @@ class AsyncSocket extends EventEmitter {
         
         this.nativeOn = this.on;
         this.on = function(event, listener) {
-            if(event=="message") this.nativeOn(event, listener);
+            if(![].includes(event)) this.nativeOn(event, listener);
             else this.ws.on(event, listener);
         };
         this.emit('open');

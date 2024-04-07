@@ -27,7 +27,7 @@ class AsyncSocket extends EventTarget {
 
         ws.addEventListener('message', (message) => {
             const data = JSONParse(message.data);
-            if(data === null) return this.dispatchEvent(message);
+            if(data === null) return this.dispatchEvent(new CustomEvent('message', {detail: message}));
             if(this._incoming(data)===2) return this.dispatchEvent(new CustomEvent('message', {
                 detail: {
                     ...data,

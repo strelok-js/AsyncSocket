@@ -1,11 +1,13 @@
-import { ServerOptions, WebSocketServer } from "ws";
+import { ServerOptions, WebSocketServer, WebSocket } from "ws";
+
+interface ASOptions {
+    reconnect: Boolean,
+    time: number,
+    count: number 
+}
 
 export class AsyncSocket {
-    constructor(ws: WebSocket, options?: {
-        reconnect: Boolean,
-        time: number,
-        count: number
-    });
+    constructor(ws: WebSocket, options?: ASOptions);
     ws: WebSocket;
     options: {
         reconnect: Boolean,
@@ -19,7 +21,6 @@ export class AsyncSocket {
         countLimit: any;
     };
     tasksForRecon: any[];
-    nativeOn: any;
     on: (event: string, listener: any) => void;
     disconnected: boolean;
     _incoming(data: any): 0 | 1 | 2;
@@ -30,7 +31,6 @@ export class AsyncSocket {
 export class AsyncSocketServer {
     constructor(serverOptions: ServerOptions);
     _wss: WebSocketServer;
-    nativeOn: any;
     on: (event: string, listener: any) => void;
 }
-export function AsyncSocketClient(wsc: any, options: any): any;
+export function AsyncSocketClient(wsc: WebSocket, options?: ASOptions): Promise<AsyncSocket>;

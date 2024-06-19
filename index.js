@@ -43,12 +43,14 @@ class AsyncSocket extends EventEmitter {
         this.emit('open');
         if(options.reconnect){
             this.ws.on("close", ()=>{
+                this.emit('close');
                 const oldEvents = this.ws._events;
                 this.disconnected = true;
                 const reconnect = address => new Promise((resolve, reject)=>{
                     const ws = new WebSocket(address);
                     ws.on("open", ()=>{
                         this.ws = ws;
+                        this.emit('reconnect');
                         this.timeout.count = 1;
                         this.ws._events = oldEvents;
                         this.disconnected = false;

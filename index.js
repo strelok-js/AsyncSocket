@@ -37,7 +37,7 @@ class AsyncSocket extends EventEmitter {
         
         this.nativeOn = this.on;
         this.on = function(event, listener) {
-            if(![].includes(event)) this.nativeOn(event, listener);
+            if(!['error', 'upgrade', 'ping', 'pong', "unexpected-response"].includes(event)) this.nativeOn(event, listener);
             else this.ws.on(event, listener);
         };
         this.emit('open');
@@ -59,7 +59,7 @@ class AsyncSocket extends EventEmitter {
                     ws.on("error", reject);
                     ws.on("close", reject);
                 }).catch(async (reason)=>{
-                    if(this.timeout.count > this.timeout.countLimit) return;
+                    if(this.timeout.count > this.timeout.countLimit) return this.emit('close');
                     await new Promise(resolve=>setTimeout(resolve, (this.timeout.time**this.timeout.count)*1000));
                     this.timeout.count++;
                     reconnect(address);

@@ -42,7 +42,7 @@ class AsyncSocket extends EventTarget {
         
         this.nativeOn = this.addEventListener;
         this.addEventListener = function(event, listener) {
-            if(![].includes(event)) this.nativeOn(event, listener);
+            if(!['error', 'upgrade', 'ping', 'pong', "unexpected-response"].includes(event)) this.nativeOn(event, listener);
             else ws.addEventListener(event, listener);
         };
         this.dispatchEvent(new CustomEvent('open'));
@@ -64,7 +64,7 @@ class AsyncSocket extends EventTarget {
                     ws.addEventListener("error", reject);
                     ws.addEventListener("close", reject);
                 }).catch(async (reason)=>{
-                    if(this.timeout.count > this.timeout.countLimit) return;
+                    if(this.timeout.count > this.timeout.countLimit) return this.emit('close');
                     await new Promise(resolve=>setTimeout(resolve, (this.timeout.time**this.timeout.count)*1000));
                     this.timeout.count++;
                     reconnect(address);

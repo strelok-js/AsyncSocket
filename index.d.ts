@@ -6,6 +6,12 @@ interface ASOptions {
     count: number 
 }
 
+interface DataOptions {
+    waitId?: String,
+    timeout?: number,
+    noReply?: Boolean 
+}
+
 export class AsyncSocket {
     constructor(ws: WebSocket, options?: ASOptions);
     ws: WebSocket;
@@ -25,8 +31,8 @@ export class AsyncSocket {
     disconnected: boolean;
     _incoming(data: any): 0 | 1 | 2;
     sendEmit(eventName: string, body: object): void;
-    sendNoReply(data: object): void;
-    send(data?: object): Promise<object>;
+    sendNoReply(data: DataOptions): void;
+    send(data?: DataOptions): Promise<object>|void;
 }
 export class AsyncSocketServer {
     constructor(serverOptions: ServerOptions);

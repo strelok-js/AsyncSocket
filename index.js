@@ -94,16 +94,16 @@ class AsyncSocket extends EventEmitter {
         else this.ws.send(JSON.stringify(data));
     }
     send(data={}) {
-        const {waitId = uuidv4(), timeout=10000} = data;
+        const {waitId = uuidv4(), timeout=10000, noReply=false} = data;
 
-        return new Promise((resolve, reject) => {
+        this.sendNoReply({...data, waitId, noReply});
+
+        if(noReply) return new Promise((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId, resolve, reject,
                 timeout: timeout?setTimeout(() => reject(new Error("The waiting time has been exceeded")), timeout):null
-            };
-
-            this.sendNoReply({...data, waitId});
-        });
+            };   
+        }); else return void 0;
     }
 }
 

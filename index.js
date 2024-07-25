@@ -98,7 +98,7 @@ class AsyncSocket extends EventEmitter {
 
         this.sendNoReply({...data, waitId, noReply});
 
-        if(noReply) return new Promise((resolve, reject) => {
+        if(!noReply) return new Promise((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId, resolve, reject,
                 timeout: timeout?setTimeout(() => reject(new Error("The waiting time has been exceeded")), timeout):null

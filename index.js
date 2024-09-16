@@ -62,7 +62,7 @@ class AsyncSocket extends EventEmitter {
                     ws.on("close", reject);
                 }).catch(async (reason)=>{
                     if(this.timeout.count > this.timeout.countLimit) return this.emit('close');
-                    await new Promise(resolve=>setTimeout(resolve, (this.timeout.time**this.timeout.count)*1000));
+                    await new Promise(resolve=>setTimeout(resolve, (this.timeout.time*this.timeout.count)*1000));
                     this.timeout.count++;
                     reconnect(address);
                 });

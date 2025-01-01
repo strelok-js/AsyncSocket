@@ -27,11 +27,14 @@ export interface Engine extends EventEmitter {
 
 export interface IncomingDataStore {
     [key: string]: SentDataStore | unknown;
-    engine: Engine;
+    as: AsyncSocket;
     waitId?: string;
     eventName?: string;
     isEvent?: boolean;
-    reply(data: SentData | SentDataStore): ReturnType<Engine['send']>;
+
+    sendNoReply(data: SentDataStore): void;
+    send(data: SentData | SentDataStore): ReturnType<Engine['send']>;
+    accept(as: AsyncSocket): IncomingDataStore;
 }
 
 export class AsyncSocket extends EventEmitter {
@@ -48,7 +51,7 @@ export class AsyncSocket extends EventEmitter {
         this._awaitMessages = {};
 
         this.engine.on('message', (message) => {
-            if (this._incomingType(message) === 2) return this.emit('message', message);
+            if (this._incomingType(message) === 2) return this.emit('message', message.accept(this));
         });
     }
     _incomingType(data: IncomingDataStore) {
@@ -57,7 +60,7 @@ export class AsyncSocket extends EventEmitter {
             return 1;
         }
         if (data.waitId && this._awaitMessages[data.waitId]) {
-            this._awaitMessages[data.waitId].resolve(data);
+            this._awaitMessages[data.waitId].resolve(data.accept(this));
             clearTimeout(this._awaitMessages[data.waitId].timeout);
             delete this._awaitMessages[data.waitId];
             return 0;

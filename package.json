@@ -1,18 +1,20 @@
 {
-  "name": "asyncsocket",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "eslint": "^8.56.0"
-  },
-  "dependencies": {
-    "uuid": "^9.0.1",
-    "ws": "^8.16.0"
-  }
+    "name": "asyncsocket",
+    "version": "1.0.0",
+    "description": "",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist/**/*"
+    ],
+    "author": "Strelok.js, TillSilph",
+    "license": "ISC",
+    "devDependencies": {
+        "@types/events": "^3.0.3",
+        "@types/uuid": "^10.0.0",
+        "eslint": "^8.56.0"
+    },
+    "dependencies": {
+        "uuid": "^9.0.1"
+    }
 }

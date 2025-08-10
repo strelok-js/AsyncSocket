@@ -1,20 +1,20 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
-type JSONPrimitive = string | number | boolean | null;
-type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
+export type JSONPrimitive = string | number | boolean | null;
+export type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
 
-type AsyncSocketPackageRestData = {
+export type AsyncSocketPackageRestData = {
     waitId?: string;
     timeout?: number;
 };
 
-type AsyncSocketPackageEventData = {
+export type AsyncSocketPackageEventData = {
     eventName?: string;
     isEvent: boolean;
 };
 
-type AsyncSocketPackageData = AsyncSocketPackageRestData &
+export type AsyncSocketPackageData = AsyncSocketPackageRestData &
     AsyncSocketPackageEventData & {
         data: JSONValue;
     };

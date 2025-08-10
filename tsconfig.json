@@ -2,6 +2,7 @@
     "compilerOptions": {
         "target": "ES2022",
         "module": "CommonJS",
+        "lib": ["ES2022"],
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
@@ -9,9 +10,11 @@
         "outDir": "./dist",
         "rootDir": "./src/",
         "declaration": true,
-        "emitDeclarationOnly": false
+        "emitDeclarationOnly": false,
+        "moduleResolution": "node",
+        "allowSyntheticDefaultImports": true,
+        "resolveJsonModule": true
     },
-
     "include": ["src/**/*"],
-    "exclude": ["node_modules", "**/*.spec.ts", "dist"]
+    "exclude": ["node_modules", "**/*.spec.ts", "dist", "dist-esm"]
 }

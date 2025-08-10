@@ -1,18 +1,29 @@
 {
     "name": "asyncsocket",
     "version": "1.0.0",
-    "description": "",
     "main": "dist/index.js",
+    "module": "dist/index.esm.js",
+    "browser": "dist/index.browser.js",
     "types": "dist/index.d.ts",
     "files": [
         "dist/**/*"
     ],
     "author": "Strelok.js, TillSilph",
     "license": "ISC",
+    "scripts": {
+        "build": "npm run build:esm && npm run build:node && npm run build:browser",
+        "build:node": "tsc",
+        "build:esm": "tsc -p tsconfig.esm.json && mv dist/index.js dist/index.esm.js",
+        "build:browser": "webpack --mode production",
+        "dev": "tsc --watch"
+    },
     "devDependencies": {
-        "@types/events": "^3.0.3",
         "@types/uuid": "^10.0.0",
-        "eslint": "^8.56.0"
+        "eslint": "^8.56.0",
+        "typescript": "^5.0.0",
+        "webpack": "^5.0.0",
+        "webpack-cli": "^5.0.0",
+        "ts-loader": "^9.0.0"
     },
     "dependencies": {
         "uuid": "^9.0.1"

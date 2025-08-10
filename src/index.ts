@@ -1,40 +1,51 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
-export type SentData = {
+type JSONPrimitive = string | number | boolean | null;
+type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
+
+type AsyncSocketPackageRestData = {
     waitId?: string;
-    isEvent?: boolean;
-    eventName?: string;
     timeout?: number;
-} & SentDataStore;
-
-export type StoredSentData = {
-    resolve: (value: IncomingDataStore | PromiseLike<IncomingDataStore>) => void;
-} & SentData;
-
-export type SentDataStore = {
-    [key: string]: SentDataStore | unknown;
 };
 
-export interface EngineEvents {
-    message: (data: IncomingDataStore) => void;
-}
+type AsyncSocketPackageEventData = {
+    eventName?: string;
+    isEvent: boolean;
+};
 
-export interface Engine extends EventEmitter {
-    send(data: SentData): void;
-    on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
-}
+type AsyncSocketPackageData = AsyncSocketPackageRestData &
+    AsyncSocketPackageEventData & {
+        data: JSONValue;
+    };
 
-export interface IncomingDataStore {
-    [key: string]: SentDataStore | unknown;
+export type StoredSentData = {
+    waitId: string;
+    timeout?: number | ReturnType<typeof setTimeout>;
+    resolve: (value: IncomingDataPackage | PromiseLike<IncomingDataPackage>) => void;
+    reject: (reason?: any) => void;
+};
+
+export interface IncomingDataPackage {
     as: AsyncSocket;
     waitId?: string;
     eventName?: string;
-    isEvent?: boolean;
+    isEvent: boolean;
 
-    sendNoReply(data: SentDataStore): void;
-    send(data: SentData | SentDataStore): ReturnType<Engine['send']>;
-    accept(as: AsyncSocket): IncomingDataStore;
+    sendNoReply(data: AsyncSocketPackageData): void;
+    send(data: AsyncSocketPackageData): ReturnType<Engine['send']>;
+    accept(as: AsyncSocket): IncomingDataPackage;
+
+    data: JSONValue;
+}
+
+export interface EngineEvents {
+    message: (data: IncomingDataPackage) => void;
+}
+
+export interface Engine extends InstanceType<typeof EventEmitter> {
+    send(data: AsyncSocketPackageData): void;
+    on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
 }
 
 export class AsyncSocket extends EventEmitter {
@@ -54,41 +65,45 @@ export class AsyncSocket extends EventEmitter {
             if (this._incomingType(message) === 2) return this.emit('message', message.accept(this));
         });
     }
-    _incomingType(data: IncomingDataStore) {
-        if (data.isEvent && data.eventName) {
-            this.emit(data.eventName, data.body);
+    _incomingType(packageData: IncomingDataPackage) {
+        if (packageData.isEvent && packageData.eventName) {
+            this.emit(packageData.eventName, packageData.data);
             return 1;
         }
-        if (data.waitId && this._awaitMessages[data.waitId]) {
-            this._awaitMessages[data.waitId].resolve(data.accept(this));
-            clearTimeout(this._awaitMessages[data.waitId].timeout);
-            delete this._awaitMessages[data.waitId];
+        if (packageData.waitId && this._awaitMessages[packageData.waitId]) {
+            this._awaitMessages[packageData.waitId].resolve(packageData.accept(this));
+            clearTimeout(this._awaitMessages[packageData.waitId].timeout);
+            delete this._awaitMessages[packageData.waitId];
             return 0;
         }
         return 2;
     }
-    sendEmit(eventName: string, body: SentDataStore) {
+    sendEmit(eventName: string, payload: JSONValue) {
         return this.sendNoReply({
             isEvent: true,
             eventName,
-            body,
+            data: payload,
         });
     }
-    sendNoReply(data: SentDataStore) {
+    sendNoReply(data: AsyncSocketPackageData) {
         this.engine.send(data);
     }
-    send(data: SentData = {}): Promise<IncomingDataStore> {
-        const { waitId = uuidv4(), timeout = 60000 } = data;
+    send(data: AsyncSocketPackageRestData & { [key: string]: JSONValue }): Promise<IncomingDataPackage> {
+        const { waitId = uuidv4(), timeout = 60000, ...payload } = data;
 
         return new Promise((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId,
                 resolve,
                 reject,
-                timeout: timeout ? (setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) as unknown as number) : undefined,
+                timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
             };
 
-            this.sendNoReply({ ...data, waitId });
+            this.sendNoReply({
+                waitId,
+                isEvent: false,
+                data: payload,
+            });
         });
     }
 }
@@ -97,7 +112,7 @@ interface ServerEngineEvents {
     connection: (data: AsyncSocket) => void;
 }
 
-export interface ServerEngine extends EventEmitter {
+export interface ServerEngine extends InstanceType<typeof EventEmitter> {
     on<K extends keyof ServerEngineEvents>(event: K, listener: ServerEngineEvents[K]): this;
 }
 
@@ -112,3 +127,9 @@ export class AsyncSocketServer extends EventEmitter {
         });
     }
 }
+
+// Default export для браузера
+export default {
+    AsyncSocket,
+    AsyncSocketServer,
+};

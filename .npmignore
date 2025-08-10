@@ -1,0 +1,10 @@
+src/
+node_modules/
+*.ts
+*.tsx
+tsconfig*.json
+.eslintrc.js
+webpack.config.js
+.gitignore
+.prettierrc
+README.md

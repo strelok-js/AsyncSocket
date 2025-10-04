@@ -14,42 +14,46 @@ export type AsyncSocketPackageEventData = {
 export type AsyncSocketPackageData = AsyncSocketPackageRestData & AsyncSocketPackageEventData & {
     data: JSONValue;
 };
-export type StoredSentData = {
+export type StoredSentData<d extends JSONValue = JSONValue> = {
     waitId: string;
     timeout?: number | ReturnType<typeof setTimeout>;
-    resolve: (value: IncomingDataPackage | PromiseLike<IncomingDataPackage>) => void;
+    resolve: (value: IncomingDataPackage<d> | PromiseLike<IncomingDataPackage<d>>) => void;
     reject: (reason?: any) => void;
 };
-export interface IncomingDataPackage {
+export interface IncomingDataPackage<d extends JSONValue = JSONValue> {
     as: AsyncSocket;
     waitId?: string;
     eventName?: string;
     isEvent: boolean;
     sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageData): ReturnType<Engine['send']>;
-    accept(as: AsyncSocket): IncomingDataPackage;
-    data: JSONValue;
+    send<d extends JSONValue = JSONValue>(data: AsyncSocketPackageData): Promise<IncomingDataPackage<d>>;
+    accept(as: AsyncSocket): this;
+    data: d;
 }
 export interface EngineEvents {
     message: (data: IncomingDataPackage) => void;
 }
 export interface Engine extends InstanceType<typeof EventEmitter> {
-    send(data: AsyncSocketPackageData): void;
+    send(data: {
+        [key: string]: JSONValue;
+    }): void;
     on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
 }
 export declare class AsyncSocket extends EventEmitter {
     engine: Engine;
     options: any;
     _awaitMessages: {
-        [key: string]: StoredSentData;
+        [key: string]: StoredSentData<any>;
     };
     constructor(engine: Engine, options?: {});
     _incomingType(packageData: IncomingDataPackage): 1 | 0 | 2;
     sendEmit(eventName: string, payload: JSONValue): void;
-    sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageRestData & {
+    sendNoReply(data: {
         [key: string]: JSONValue;
-    }): Promise<IncomingDataPackage>;
+    }): void;
+    send<d extends JSONValue = JSONValue>(data: AsyncSocketPackageRestData & {
+        [key: string]: JSONValue;
+    }): Promise<IncomingDataPackage<d>>;
 }
 interface ServerEngineEvents {
     connection: (data: AsyncSocket) => void;

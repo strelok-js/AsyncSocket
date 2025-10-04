@@ -42,7 +42,7 @@ export class AsyncSocket extends EventEmitter {
         return new Promise((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId,
-                resolve,
+                resolve: resolve,
                 reject,
                 timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
             };
@@ -64,7 +64,6 @@ export class AsyncSocketServer extends EventEmitter {
         });
     }
 }
-// Default export для браузера
 export default {
     AsyncSocket,
     AsyncSocketServer,

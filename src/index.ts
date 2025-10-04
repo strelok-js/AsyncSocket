@@ -19,24 +19,24 @@ export type AsyncSocketPackageData = AsyncSocketPackageRestData &
         data: JSONValue;
     };
 
-export type StoredSentData = {
+export type StoredSentData<d extends JSONValue = JSONValue> = {
     waitId: string;
     timeout?: number | ReturnType<typeof setTimeout>;
-    resolve: (value: IncomingDataPackage | PromiseLike<IncomingDataPackage>) => void;
+    resolve: (value: IncomingDataPackage<d> | PromiseLike<IncomingDataPackage<d>>) => void;
     reject: (reason?: any) => void;
 };
 
-export interface IncomingDataPackage {
+export interface IncomingDataPackage<d extends JSONValue = JSONValue> {
     as: AsyncSocket;
     waitId?: string;
     eventName?: string;
     isEvent: boolean;
 
     sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageData): ReturnType<Engine['send']>;
-    accept(as: AsyncSocket): IncomingDataPackage;
+    send<d extends JSONValue = JSONValue>(data: AsyncSocketPackageData): Promise<IncomingDataPackage<d>>;
+    accept(as: AsyncSocket): this;
 
-    data: JSONValue;
+    data: d;
 }
 
 export interface EngineEvents {
@@ -44,7 +44,7 @@ export interface EngineEvents {
 }
 
 export interface Engine extends InstanceType<typeof EventEmitter> {
-    send(data: AsyncSocketPackageData): void;
+    send(data: { [key: string]: JSONValue }): void;
     on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
 }
 
@@ -52,7 +52,7 @@ export class AsyncSocket extends EventEmitter {
     engine: Engine;
     options: any;
     _awaitMessages: {
-        [key: string]: StoredSentData;
+        [key: string]: StoredSentData<any>;
     };
     constructor(engine: Engine, options = {}) {
         super();
@@ -85,16 +85,16 @@ export class AsyncSocket extends EventEmitter {
             data: payload,
         });
     }
-    sendNoReply(data: AsyncSocketPackageData) {
+    sendNoReply(data: { [key: string]: JSONValue }) {
         this.engine.send(data);
     }
-    send(data: AsyncSocketPackageRestData & { [key: string]: JSONValue }): Promise<IncomingDataPackage> {
+    send<d extends JSONValue = JSONValue>(data: AsyncSocketPackageRestData & { [key: string]: JSONValue }): Promise<IncomingDataPackage<d>> {
         const { waitId = uuidv4(), timeout = 60000, ...payload } = data;
 
-        return new Promise((resolve, reject) => {
+        return new Promise<IncomingDataPackage<d>>((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId,
-                resolve,
+                resolve: resolve as StoredSentData<d>['resolve'],
                 reject,
                 timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
             };
@@ -128,7 +128,6 @@ export class AsyncSocketServer extends EventEmitter {
     }
 }
 
-// Default export для браузера
 export default {
     AsyncSocket,
     AsyncSocketServer,

@@ -22,7 +22,7 @@ export type AsyncSocketPackageData = AsyncSocketPackageRestData &
 export type StoredSentData<d extends JSONValue = JSONValue> = {
     waitId: string;
     timeout?: number | ReturnType<typeof setTimeout>;
-    resolve: (value: IncomingDataPackage<d> | PromiseLike<IncomingDataPackage<d>>) => void;
+    resolve: (value: IncomingDataPackage<d>) => void;
     reject: (reason?: any) => void;
 };
 
@@ -39,8 +39,12 @@ export interface IncomingDataPackage<d extends JSONValue = JSONValue> {
     data: d;
 }
 
-export interface EngineEvents {
-    message: (data: IncomingDataPackage) => void;
+export interface EngineEvents<message extends IncomingDataPackage = IncomingDataPackage> {
+    message: (data: message) => void;
+}
+
+export interface AsyncSocketEvents<message extends IncomingDataPackage = IncomingDataPackage> {
+    [key: string | symbol]: (data: message) => void;
 }
 
 export interface Engine extends InstanceType<typeof EventEmitter> {
@@ -48,13 +52,13 @@ export interface Engine extends InstanceType<typeof EventEmitter> {
     on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
 }
 
-export class AsyncSocket extends EventEmitter {
-    engine: Engine;
+export class AsyncSocket<E extends Engine = Engine> extends EventEmitter {
+    engine: E;
     options: any;
     _awaitMessages: {
         [key: string]: StoredSentData<any>;
     };
-    constructor(engine: Engine, options = {}) {
+    constructor(engine: E, options = {}) {
         super();
         this.engine = engine;
         this.options = options;
@@ -65,9 +69,18 @@ export class AsyncSocket extends EventEmitter {
             if (this._incomingType(message) === 2) return this.emit('message', message.accept(this));
         });
     }
+
+    on<K extends keyof AsyncSocketEvents<IncomingDataPackage>>(event: K, listener: AsyncSocketEvents<IncomingDataPackage>[K]): this {
+        return super.on(event as string | symbol, listener);
+    }
+
+    emit<K extends keyof AsyncSocketEvents<IncomingDataPackage>>(event: K, ...args: Parameters<AsyncSocketEvents<IncomingDataPackage>[K]>): boolean {
+        return super.emit(event as string | symbol, ...args);
+    }
+
     _incomingType(packageData: IncomingDataPackage) {
         if (packageData.isEvent && packageData.eventName) {
-            this.emit(packageData.eventName, packageData.data);
+            this.emit(packageData.eventName, packageData.accept(this));
             return 1;
         }
         if (packageData.waitId && this._awaitMessages[packageData.waitId]) {
@@ -94,9 +107,9 @@ export class AsyncSocket extends EventEmitter {
         return new Promise<IncomingDataPackage<d>>((resolve, reject) => {
             this._awaitMessages[waitId] = {
                 waitId,
-                resolve: resolve as StoredSentData<d>['resolve'],
+                resolve,
                 reject,
-                timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
+                timeout: timeout ? setTimeout(() => reject(new Error('AS: The waiting time has been exceeded')), timeout) : undefined,
             };
 
             this.sendNoReply({
@@ -108,23 +121,31 @@ export class AsyncSocket extends EventEmitter {
     }
 }
 
-interface ServerEngineEvents {
-    connection: (data: AsyncSocket) => void;
+interface ServerEngineEvents<A extends AsyncSocket = AsyncSocket> {
+    connection: (data: A) => void;
 }
 
-export interface ServerEngine extends InstanceType<typeof EventEmitter> {
-    on<K extends keyof ServerEngineEvents>(event: K, listener: ServerEngineEvents[K]): this;
+export interface ServerEngine<A extends AsyncSocket = AsyncSocket> extends InstanceType<typeof EventEmitter> {
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this;
 }
 
-export class AsyncSocketServer extends EventEmitter {
-    engine: ServerEngine;
-    constructor(engine: ServerEngine) {
+export class AsyncSocketServer<E extends ServerEngine<A> = ServerEngine, A extends AsyncSocket = AsyncSocket> extends EventEmitter {
+    engine: E;
+    constructor(engine: E) {
         super();
         this.engine = engine;
 
         this.engine.on('connection', (asyncSocket) => {
             this.emit('connection', asyncSocket);
         });
+    }
+
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this {
+        return super.on(event, listener);
+    }
+
+    emit<K extends keyof ServerEngineEvents<A>>(event: K, ...args: Parameters<ServerEngineEvents<A>[K]>): boolean {
+        return super.emit(event, ...args);
     }
 }
 

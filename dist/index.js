@@ -3,6 +3,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AsyncSocketServer = exports.AsyncSocket = void 0;
 const uuid_1 = require("uuid");
 const events_1 = require("events");
+// ============================================================================
+// Constants
+// ============================================================================
+const DEFAULT_TIMEOUT = 60000;
+const MESSAGE_TYPE = {
+    RESPONSE: 0,
+    EVENT: 1,
+    UNHANDLED: 2,
+};
+// ============================================================================
+// AsyncSocket Class
+// ============================================================================
 class AsyncSocket extends events_1.EventEmitter {
     engine;
     options;
@@ -11,27 +23,84 @@ class AsyncSocket extends events_1.EventEmitter {
         super();
         this.engine = engine;
         this.options = options;
-        this._awaitMessages = {};
+        this._awaitMessages = new Map();
+        this.setupMessageHandler();
+    }
+    // ========================================================================
+    // EventEmitter Overrides
+    // ========================================================================
+    on(event, listener) {
+        return super.on(event, listener);
+    }
+    emit(event, data) {
+        return super.emit(event, data);
+    }
+    // ========================================================================
+    // Private Methods
+    // ========================================================================
+    setupMessageHandler() {
         this.engine.on('message', (message) => {
-            if (this._incomingType(message) === 2)
-                return this.emit('message', message.accept(this));
+            const messageType = this.processIncomingMessage(message);
+            if (messageType === MESSAGE_TYPE.UNHANDLED) {
+                this.emit('message', message.accept(this));
+            }
         });
     }
-    _incomingType(packageData) {
-        if (packageData.isEvent && packageData.eventName) {
-            this.emit(packageData.eventName, packageData.data);
-            return 1;
+    processIncomingMessage(packageData) {
+        // Handle event messages
+        if (this.isEventMessage(packageData)) {
+            this.emit(packageData.eventName, packageData.accept(this));
+            return MESSAGE_TYPE.EVENT;
         }
-        if (packageData.waitId && this._awaitMessages[packageData.waitId]) {
-            this._awaitMessages[packageData.waitId].resolve(packageData.accept(this));
-            clearTimeout(this._awaitMessages[packageData.waitId].timeout);
-            delete this._awaitMessages[packageData.waitId];
-            return 0;
+        // Handle response messages
+        if (this.isResponseMessage(packageData)) {
+            this.handleResponseMessage(packageData);
+            return MESSAGE_TYPE.RESPONSE;
         }
-        return 2;
+        // Unhandled message
+        return MESSAGE_TYPE.UNHANDLED;
     }
+    isEventMessage(packageData) {
+        return packageData.isEvent === true && Boolean(packageData.eventName);
+    }
+    isResponseMessage(packageData) {
+        return Boolean(packageData.waitId) && this._awaitMessages.has(packageData.waitId);
+    }
+    handleResponseMessage(packageData) {
+        const storedData = this._awaitMessages.get(packageData.waitId);
+        if (!storedData)
+            return;
+        storedData.resolve(packageData.accept(this));
+        this.clearTimeout(storedData.timeout);
+        this._awaitMessages.delete(packageData.waitId);
+    }
+    clearTimeout(timeout) {
+        if (timeout && typeof timeout !== 'number') {
+            clearTimeout(timeout);
+        }
+    }
+    createTimeoutHandler(waitId, timeout) {
+        return setTimeout(() => {
+            const storedData = this._awaitMessages.get(waitId);
+            if (storedData) {
+                storedData.reject(new Error('AS: The waiting time has been exceeded'));
+                this._awaitMessages.delete(waitId);
+            }
+        }, timeout);
+    }
+    storePendingMessage(waitId, timeout, resolve, reject) {
+        this._awaitMessages.set(waitId, {
+            waitId,
+            resolve,
+            reject,
+            timeout: timeout > 0 ? this.createTimeoutHandler(waitId, timeout) : undefined,
+        });
+    }
+    // ========================================================================
+    // Public Methods
+    // ========================================================================
     sendEmit(eventName, payload) {
-        return this.sendNoReply({
+        this.sendNoReply({
             isEvent: true,
             eventName,
             data: payload,
@@ -41,14 +110,9 @@ class AsyncSocket extends events_1.EventEmitter {
         this.engine.send(data);
     }
     send(data) {
-        const { waitId = (0, uuid_1.v4)(), timeout = 60000, ...payload } = data;
+        const { waitId = (0, uuid_1.v4)(), timeout = DEFAULT_TIMEOUT, ...payload } = data;
         return new Promise((resolve, reject) => {
-            this._awaitMessages[waitId] = {
-                waitId,
-                resolve: resolve,
-                reject,
-                timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
-            };
+            this.storePendingMessage(waitId, timeout, resolve, reject);
             this.sendNoReply({
                 waitId,
                 isEvent: false,
@@ -58,17 +122,32 @@ class AsyncSocket extends events_1.EventEmitter {
     }
 }
 exports.AsyncSocket = AsyncSocket;
+// ============================================================================
+// AsyncSocketServer Class
+// ============================================================================
 class AsyncSocketServer extends events_1.EventEmitter {
     engine;
     constructor(engine) {
         super();
         this.engine = engine;
+        this.setupConnectionHandler();
+    }
+    setupConnectionHandler() {
         this.engine.on('connection', (asyncSocket) => {
             this.emit('connection', asyncSocket);
         });
     }
+    on(event, listener) {
+        return super.on(event, listener);
+    }
+    emit(event, ...args) {
+        return super.emit(event, ...args);
+    }
 }
 exports.AsyncSocketServer = AsyncSocketServer;
+// ============================================================================
+// Default Export
+// ============================================================================
 exports.default = {
     AsyncSocket,
     AsyncSocketServer,

@@ -31,7 +31,7 @@ wss.on('connection', (wsc) => {
     console.log('New connect');
 
     wsc.on('message', (mess) => {
-        if (mess.data.testReply) return mess.reply({ message: 'Great' });
+        if (mess.data.testReply) return mess.sendNoReply({ message: 'Great' });
         else console.log(mess);
     });
 });

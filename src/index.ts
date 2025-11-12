@@ -177,7 +177,12 @@ export class AsyncSocket<E extends Engine = Engine> extends EventEmitter {
     }
 
     sendNoReply(data: AsyncSocketPackageRestData): void {
-        this.engine.send(data);
+        const { waitId, ...payload } = data;
+        this.engine.send({
+            waitId,
+            isEvent: false,
+            data: payload,
+        });
     }
 
     send<d = any>(data: AsyncSocketPackageRestData): Promise<IncomingDataPackage<d>> {

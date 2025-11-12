@@ -1,103 +1,195 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EventEmitter } from 'events';
 
-export type JSONPrimitive = string | number | boolean | null;
-export type JSONValue = JSONPrimitive | { [key: string]: JSONValue } | JSONValue[];
+// ============================================================================
+// Types & Interfaces
+// ============================================================================
 
 export type AsyncSocketPackageRestData = {
     waitId?: string;
     timeout?: number;
+    [key: string]: any;
 };
 
-export type AsyncSocketPackageEventData = {
-    eventName?: string;
-    isEvent: boolean;
-};
-
-export type AsyncSocketPackageData = AsyncSocketPackageRestData &
-    AsyncSocketPackageEventData & {
-        data: JSONValue;
-    };
-
-export type StoredSentData = {
+export type StoredSentData<d = any> = {
     waitId: string;
     timeout?: number | ReturnType<typeof setTimeout>;
-    resolve: (value: IncomingDataPackage | PromiseLike<IncomingDataPackage>) => void;
+    resolve: (value: IncomingDataPackage<d>) => void;
     reject: (reason?: any) => void;
 };
 
-export interface IncomingDataPackage {
+export interface IncomingDataPackage<d = any> {
     as: AsyncSocket;
     waitId?: string;
     eventName?: string;
     isEvent: boolean;
 
-    sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageData): ReturnType<Engine['send']>;
-    accept(as: AsyncSocket): IncomingDataPackage;
+    sendNoReply(data: AsyncSocketPackageRestData): void;
+    send<d = any>(data: AsyncSocketPackageRestData): Promise<IncomingDataPackage<d>>;
+    accept(as: AsyncSocket): this;
 
-    data: JSONValue;
-}
-
-export interface EngineEvents {
-    message: (data: IncomingDataPackage) => void;
+    data: d;
 }
 
 export interface Engine extends InstanceType<typeof EventEmitter> {
-    send(data: AsyncSocketPackageData): void;
-    on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
+    send(data: AsyncSocketPackageRestData): void;
+    on<D = any>(event: string | symbol, listener: (data: IncomingDataPackage<D>) => void): this;
+    emit<D = any>(event: string | symbol, data: D): boolean;
 }
 
-export class AsyncSocket extends EventEmitter {
-    engine: Engine;
-    options: any;
-    _awaitMessages: {
-        [key: string]: StoredSentData;
-    };
-    constructor(engine: Engine, options = {}) {
+interface ServerEngineEvents<A extends AsyncSocket = AsyncSocket> {
+    connection: (data: A) => void;
+}
+
+export interface ServerEngine<A extends AsyncSocket = AsyncSocket> extends InstanceType<typeof EventEmitter> {
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const DEFAULT_TIMEOUT = 60000;
+const MESSAGE_TYPE = {
+    RESPONSE: 0,
+    EVENT: 1,
+    UNHANDLED: 2,
+} as const;
+
+// ============================================================================
+// AsyncSocket Class
+// ============================================================================
+
+export class AsyncSocket<E extends Engine = Engine> extends EventEmitter {
+    readonly engine: E;
+    private readonly options: any;
+    private readonly _awaitMessages: Map<string, StoredSentData<any>>;
+
+    constructor(engine: E, options = {}) {
         super();
         this.engine = engine;
         this.options = options;
+        this._awaitMessages = new Map();
 
-        this._awaitMessages = {};
+        this.setupMessageHandler();
+    }
 
-        this.engine.on('message', (message) => {
-            if (this._incomingType(message) === 2) return this.emit('message', message.accept(this));
+    // ========================================================================
+    // EventEmitter Overrides
+    // ========================================================================
+
+    on<D = any>(event: string | symbol, listener: (data: IncomingDataPackage<D>) => void): this {
+        return super.on(event as string | symbol, listener);
+    }
+
+    emit<D = any>(event: string | symbol, data: D): boolean {
+        return super.emit(event, data);
+    }
+
+    // ========================================================================
+    // Private Methods
+    // ========================================================================
+
+    private setupMessageHandler(): void {
+        this.engine.on('message', (message: IncomingDataPackage) => {
+            const messageType = this.processIncomingMessage(message);
+
+            if (messageType === MESSAGE_TYPE.UNHANDLED) {
+                this.emit('message', message.accept(this));
+            }
         });
     }
-    _incomingType(packageData: IncomingDataPackage) {
-        if (packageData.isEvent && packageData.eventName) {
-            this.emit(packageData.eventName, packageData.data);
-            return 1;
+
+    private processIncomingMessage(packageData: IncomingDataPackage): (typeof MESSAGE_TYPE)[keyof typeof MESSAGE_TYPE] {
+        // Handle event messages
+        if (this.isEventMessage(packageData)) {
+            this.emit(packageData.eventName!, packageData.accept(this));
+            return MESSAGE_TYPE.EVENT;
         }
-        if (packageData.waitId && this._awaitMessages[packageData.waitId]) {
-            this._awaitMessages[packageData.waitId].resolve(packageData.accept(this));
-            clearTimeout(this._awaitMessages[packageData.waitId].timeout);
-            delete this._awaitMessages[packageData.waitId];
-            return 0;
+
+        // Handle response messages
+        if (this.isResponseMessage(packageData)) {
+            this.handleResponseMessage(packageData);
+            return MESSAGE_TYPE.RESPONSE;
         }
-        return 2;
+
+        // Unhandled message
+        return MESSAGE_TYPE.UNHANDLED;
     }
-    sendEmit(eventName: string, payload: JSONValue) {
-        return this.sendNoReply({
+
+    private isEventMessage(packageData: IncomingDataPackage): boolean {
+        return packageData.isEvent === true && Boolean(packageData.eventName);
+    }
+
+    private isResponseMessage(packageData: IncomingDataPackage): boolean {
+        return Boolean(packageData.waitId) && this._awaitMessages.has(packageData.waitId!);
+    }
+
+    private handleResponseMessage(packageData: IncomingDataPackage): void {
+        const storedData = this._awaitMessages.get(packageData.waitId!);
+        if (!storedData) return;
+
+        storedData.resolve(packageData.accept(this));
+        this.clearTimeout(storedData.timeout);
+        this._awaitMessages.delete(packageData.waitId!);
+    }
+
+    private clearTimeout(timeout?: number | ReturnType<typeof setTimeout>): void {
+        if (timeout && typeof timeout !== 'number') {
+            clearTimeout(timeout);
+        }
+    }
+
+    private createTimeoutHandler(waitId: string, timeout: number): ReturnType<typeof setTimeout> {
+        return setTimeout(() => {
+            const storedData = this._awaitMessages.get(waitId);
+            if (storedData) {
+                storedData.reject(new Error('AS: The waiting time has been exceeded'));
+                this._awaitMessages.delete(waitId);
+            }
+        }, timeout);
+    }
+
+    private storePendingMessage<d = any>(
+        waitId: string,
+        timeout: number,
+        resolve: (value: IncomingDataPackage<d>) => void,
+        reject: (reason?: any) => void,
+    ): void {
+        this._awaitMessages.set(waitId, {
+            waitId,
+            resolve,
+            reject,
+            timeout: timeout > 0 ? this.createTimeoutHandler(waitId, timeout) : undefined,
+        });
+    }
+
+    // ========================================================================
+    // Public Methods
+    // ========================================================================
+
+    sendEmit(eventName: string, payload: any): void {
+        this.sendNoReply({
             isEvent: true,
             eventName,
             data: payload,
         });
     }
-    sendNoReply(data: AsyncSocketPackageData) {
-        this.engine.send(data);
-    }
-    send(data: AsyncSocketPackageRestData & { [key: string]: JSONValue }): Promise<IncomingDataPackage> {
-        const { waitId = uuidv4(), timeout = 60000, ...payload } = data;
 
-        return new Promise((resolve, reject) => {
-            this._awaitMessages[waitId] = {
-                waitId,
-                resolve,
-                reject,
-                timeout: timeout ? setTimeout(() => reject(new Error('The waiting time has been exceeded')), timeout) : undefined,
-            };
+    sendNoReply(data: AsyncSocketPackageRestData): void {
+        const { waitId, ...payload } = data;
+        this.engine.send({
+            waitId,
+            isEvent: false,
+            data: payload,
+        });
+    }
+
+    send<d = any>(data: AsyncSocketPackageRestData): Promise<IncomingDataPackage<d>> {
+        const { waitId = uuidv4(), timeout = DEFAULT_TIMEOUT, ...payload } = data;
+
+        return new Promise<IncomingDataPackage<d>>((resolve, reject) => {
+            this.storePendingMessage(waitId, timeout, resolve, reject);
 
             this.sendNoReply({
                 waitId,
@@ -108,27 +200,38 @@ export class AsyncSocket extends EventEmitter {
     }
 }
 
-interface ServerEngineEvents {
-    connection: (data: AsyncSocket) => void;
-}
+// ============================================================================
+// AsyncSocketServer Class
+// ============================================================================
 
-export interface ServerEngine extends InstanceType<typeof EventEmitter> {
-    on<K extends keyof ServerEngineEvents>(event: K, listener: ServerEngineEvents[K]): this;
-}
+export class AsyncSocketServer<E extends ServerEngine<A> = ServerEngine, A extends AsyncSocket = AsyncSocket> extends EventEmitter {
+    readonly engine: E;
 
-export class AsyncSocketServer extends EventEmitter {
-    engine: ServerEngine;
-    constructor(engine: ServerEngine) {
+    constructor(engine: E) {
         super();
         this.engine = engine;
+        this.setupConnectionHandler();
+    }
 
-        this.engine.on('connection', (asyncSocket) => {
+    private setupConnectionHandler(): void {
+        this.engine.on('connection', (asyncSocket: A) => {
             this.emit('connection', asyncSocket);
         });
     }
+
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this {
+        return super.on(event, listener);
+    }
+
+    emit<K extends keyof ServerEngineEvents<A>>(event: K, ...args: Parameters<ServerEngineEvents<A>[K]>): boolean {
+        return super.emit(event, ...args);
+    }
 }
 
-// Default export для браузера
+// ============================================================================
+// Default Export
+// ============================================================================
+
 export default {
     AsyncSocket,
     AsyncSocketServer,

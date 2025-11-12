@@ -1,65 +1,61 @@
 import { EventEmitter } from 'events';
-export type JSONPrimitive = string | number | boolean | null;
-export type JSONValue = JSONPrimitive | {
-    [key: string]: JSONValue;
-} | JSONValue[];
 export type AsyncSocketPackageRestData = {
     waitId?: string;
     timeout?: number;
+    [key: string]: any;
 };
-export type AsyncSocketPackageEventData = {
-    eventName?: string;
-    isEvent: boolean;
-};
-export type AsyncSocketPackageData = AsyncSocketPackageRestData & AsyncSocketPackageEventData & {
-    data: JSONValue;
-};
-export type StoredSentData = {
+export type StoredSentData<d = any> = {
     waitId: string;
     timeout?: number | ReturnType<typeof setTimeout>;
-    resolve: (value: IncomingDataPackage | PromiseLike<IncomingDataPackage>) => void;
+    resolve: (value: IncomingDataPackage<d>) => void;
     reject: (reason?: any) => void;
 };
-export interface IncomingDataPackage {
+export interface IncomingDataPackage<d = any> {
     as: AsyncSocket;
     waitId?: string;
     eventName?: string;
     isEvent: boolean;
-    sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageData): ReturnType<Engine['send']>;
-    accept(as: AsyncSocket): IncomingDataPackage;
-    data: JSONValue;
-}
-export interface EngineEvents {
-    message: (data: IncomingDataPackage) => void;
+    sendNoReply(data: AsyncSocketPackageRestData): void;
+    send<d = any>(data: AsyncSocketPackageRestData): Promise<IncomingDataPackage<d>>;
+    accept(as: AsyncSocket): this;
+    data: d;
 }
 export interface Engine extends InstanceType<typeof EventEmitter> {
-    send(data: AsyncSocketPackageData): void;
-    on<K extends keyof EngineEvents>(event: K, listener: EngineEvents[K]): this;
+    send(data: AsyncSocketPackageRestData): void;
+    on<D = any>(event: string | symbol, listener: (data: IncomingDataPackage<D>) => void): this;
+    emit<D = any>(event: string | symbol, data: D): boolean;
 }
-export declare class AsyncSocket extends EventEmitter {
-    engine: Engine;
-    options: any;
-    _awaitMessages: {
-        [key: string]: StoredSentData;
-    };
-    constructor(engine: Engine, options?: {});
-    _incomingType(packageData: IncomingDataPackage): 1 | 0 | 2;
-    sendEmit(eventName: string, payload: JSONValue): void;
-    sendNoReply(data: AsyncSocketPackageData): void;
-    send(data: AsyncSocketPackageRestData & {
-        [key: string]: JSONValue;
-    }): Promise<IncomingDataPackage>;
+interface ServerEngineEvents<A extends AsyncSocket = AsyncSocket> {
+    connection: (data: A) => void;
 }
-interface ServerEngineEvents {
-    connection: (data: AsyncSocket) => void;
+export interface ServerEngine<A extends AsyncSocket = AsyncSocket> extends InstanceType<typeof EventEmitter> {
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this;
 }
-export interface ServerEngine extends InstanceType<typeof EventEmitter> {
-    on<K extends keyof ServerEngineEvents>(event: K, listener: ServerEngineEvents[K]): this;
+export declare class AsyncSocket<E extends Engine = Engine> extends EventEmitter {
+    readonly engine: E;
+    private readonly options;
+    private readonly _awaitMessages;
+    constructor(engine: E, options?: {});
+    on<D = any>(event: string | symbol, listener: (data: IncomingDataPackage<D>) => void): this;
+    emit<D = any>(event: string | symbol, data: D): boolean;
+    private setupMessageHandler;
+    private processIncomingMessage;
+    private isEventMessage;
+    private isResponseMessage;
+    private handleResponseMessage;
+    private clearTimeout;
+    private createTimeoutHandler;
+    private storePendingMessage;
+    sendEmit(eventName: string, payload: any): void;
+    sendNoReply(data: AsyncSocketPackageRestData): void;
+    send<d = any>(data: AsyncSocketPackageRestData): Promise<IncomingDataPackage<d>>;
 }
-export declare class AsyncSocketServer extends EventEmitter {
-    engine: ServerEngine;
-    constructor(engine: ServerEngine);
+export declare class AsyncSocketServer<E extends ServerEngine<A> = ServerEngine, A extends AsyncSocket = AsyncSocket> extends EventEmitter {
+    readonly engine: E;
+    constructor(engine: E);
+    private setupConnectionHandler;
+    on<K extends keyof ServerEngineEvents<A>>(event: K, listener: ServerEngineEvents<A>[K]): this;
+    emit<K extends keyof ServerEngineEvents<A>>(event: K, ...args: Parameters<ServerEngineEvents<A>[K]>): boolean;
 }
 declare const _default: {
     AsyncSocket: typeof AsyncSocket;
